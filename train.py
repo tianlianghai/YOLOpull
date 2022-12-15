@@ -29,7 +29,8 @@ import logging
 seed = 123
 torch.manual_seed(seed)
 
-# Hyperparameters etc. 
+# Hyperparameters etc.
+PHASE = 'train'
 LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
 BATCH_SIZE = 16 # 64 in original paper but I don't have that much vram, grad accum?
@@ -38,7 +39,6 @@ EPOCHS = 150
 MOMENTUM=0.9
 NUM_WORKERS = 2
 PIN_MEMORY = True
-LOAD_MODEL = True
 LOAD_MODEL_FILE = "voc.pth"
 IMG_DIR = "data/images"
 LABEL_DIR = "data/labels"
@@ -79,7 +79,6 @@ def train_fn(train_loader, model, optimizer, loss_fn):
         # update progress bar
         loop.set_postfix(loss=loss.item())
 
-    print(f"Mean loss was {sum(mean_loss)/len(mean_loss)}")
     logging.info(f"Mean loss {sum(mean_loss) / len(mean_loss)}")
 
 
@@ -94,7 +93,7 @@ def main():
     loss_fn = YoloLoss()
     logging.basicConfig(filename="yolo.log", encoding='utf-8', level=logging.DEBUG, format='[%(levelname)s %(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
     
-    if LOAD_MODEL:
+    if PHASE !='train':
         load_checkpoint(torch.load(LOAD_MODEL_FILE), model, optimizer)
 
     train_dataset = VOCDataset(
@@ -132,13 +131,8 @@ def main():
                    "optimizer": optimizer.state_dict(),
                }
     for epoch in range(EPOCHS):
-        print(f"**************************epoch {epoch}***********************************")
-        logging.info(f"########################EPOCH {epoch}/{EPOCHS} #####################")
-        # if LOAD_MODEL:
-        #     
-
-        if LOAD_MODEL:
-            logging.info("######################on TRAIN###########################")
+        # this part is for showing picture in the ipynb
+        if PHASE=='show':
             for x, y in test_loader:
                 x = x.to(DEVICE)
                 bboxes = cellboxes_to_boxes(model(x))
@@ -148,6 +142,29 @@ def main():
                     plot_image(x[idx].permute(1,2,0).to("cpu"), bboxes_nms)
                 
                 exit()
+        
+        if PHASE=='test':
+            logging.info(f"############on TEST###################")
+
+            logging.info(f"getting boxes")
+            pred_boxes, target_boxes = get_bboxes(
+                test_loader, model, iou_threshold=0.5, threshold=0.4
+            )
+
+            logging.info("calculating AP")
+            mean_avg_prec = mean_average_precision(
+                pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
+            )
+            print(f"Test mAP: {mean_avg_prec}")
+            logging.info(f"Test mAP: {mean_avg_prec}")
+        
+            logging.info(f"exiting")
+            print("exiting")
+            return
+        # else if on train phase
+        logging.info(f"########################EPOCH {epoch}/{EPOCHS} #####################") 
+        train_fn(train_loader, model, optimizer, loss_fn)
+        
         if epoch > 20 and epoch % 5 == 0:
             logging.info("############# on TRAIN##############")
             logging.info("getting boxes")
@@ -189,27 +206,7 @@ def main():
                    "optimizer": optimizer.state_dict(),
                }
             logging.info(f"Test mAP: {mean_avg_prec}")
-
-        if LOAD_MODEL:
-            logging.info(f"############on TEST###################")
-
-            logging.info(f"getting boxes")
-            pred_boxes, target_boxes = get_bboxes(
-                test_loader, model, iou_threshold=0.5, threshold=0.4
-            )
-
-            logging.info("calculating AP")
-            mean_avg_prec = mean_average_precision(
-                pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
-            )
-            print(f"Train mAP: {mean_avg_prec}")
-            logging.info(f"Train mAP: {mean_avg_prec}")
-        
-            logging.info(f"exiting")
-            print("exiting")
-            return
-
-        train_fn(train_loader, model, optimizer, loss_fn)
+    
     logging.info(f"best mAP on testset is {best_map}")
     save_checkpoint(best_model, filename=LOAD_MODEL_FILE)
 
