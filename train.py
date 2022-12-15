@@ -130,85 +130,86 @@ def main():
                    "state_dict": model.state_dict(),
                    "optimizer": optimizer.state_dict(),
                }
-    for epoch in range(EPOCHS):
-        # this part is for showing picture in the ipynb
-        if PHASE=='show':
-            for x, y in test_loader:
-                x = x.to(DEVICE)
-                bboxes = cellboxes_to_boxes(model(x))
-                for idx in range(8):
-                    
-                    bboxes_nms = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
-                    plot_image(x[idx].permute(1,2,0).to("cpu"), bboxes_nms)
-                
-                exit()
-        
-        if PHASE=='test':
-            logging.info(f"############on TEST###################")
-
-            logging.info(f"getting boxes")
-            pred_boxes, target_boxes = get_bboxes(
-                test_loader, model, iou_threshold=0.5, threshold=0.4
-            )
-
-            logging.info("calculating AP")
-            mean_avg_prec = mean_average_precision(
-                pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
-            )
-            print(f"Test mAP: {mean_avg_prec}")
-            logging.info(f"Test mAP: {mean_avg_prec}")
-        
-            logging.info(f"exiting")
-            print("exiting")
-            return
-        # else if on train phase
-        logging.info(f"########################EPOCH {epoch}/{EPOCHS} #####################") 
-        train_fn(train_loader, model, optimizer, loss_fn)
-        
-        if epoch > 20 and epoch % 5 == 0:
-            logging.info("############# on TRAIN##############")
-            logging.info("getting boxes")
-            pred_boxes, target_boxes = get_bboxes(
-                train_loader, model, iou_threshold=0.5, threshold=0.4
-            )
-
-            logging.info("calculating AP")
-            mean_avg_prec = mean_average_precision(
-                pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
-            )
-
-            if mean_avg_prec > 0.9:
-               checkpoint = {
-                   "state_dict": model.state_dict(),
-                   "optimizer": optimizer.state_dict(),
-               }
-               save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
-               return
-            print(f"Train mAP: {mean_avg_prec}")
-            logging.info(f"Train mAP: {mean_avg_prec}")
-            
-            logging.info(f"############on TEST###################")
-
-            logging.info(f"getting boxes")
-            pred_boxes, target_boxes = get_bboxes(
-                test_loader, model, iou_threshold=0.5, threshold=0.4
-            )
-
-            logging.info("calculating AP")
-            mean_avg_prec = mean_average_precision(
-                pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
-            )
-            print(f"Test mAP: {mean_avg_prec}")
-            if mean_avg_prec > best_map:
-                best_map = mean_avg_prec
-                best_model= {
-                   "state_dict": model.state_dict(),
-                   "optimizer": optimizer.state_dict(),
-               }
-            logging.info(f"Test mAP: {mean_avg_prec}")
     
-    logging.info(f"best mAP on testset is {best_map}")
-    save_checkpoint(best_model, filename=LOAD_MODEL_FILE)
+    # this part is for showing picture in the ipynb
+    if PHASE=='show':
+        for x, y in test_loader:
+            x = x.to(DEVICE)
+            bboxes = cellboxes_to_boxes(model(x))
+            for idx in range(8):
+                
+                bboxes_nms = non_max_suppression(bboxes[idx], iou_threshold=0.5, threshold=0.4, box_format="midpoint")
+                plot_image(x[idx].permute(1,2,0).to("cpu"), bboxes_nms)
+            
+            exit()
+        
+    elif PHASE=='test':
+        logging.info(f"############on TRAIN###################")
+        logging.info(f"getting boxes")
+        pred_boxes, target_boxes = get_bboxes(
+            train_loader, model, iou_threshold=0.5, threshold=0.4
+        )
+        logging.info("calculating AP")
+        mean_avg_prec = mean_average_precision(
+            pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
+        )
+        print(f"Train mAP: {mean_avg_prec}")
+        logging.info(f"Train mAP: {mean_avg_prec}")
+        
+        logging.info(f"############on TEST###################")
+        logging.info(f"getting boxes")
+        pred_boxes, target_boxes = get_bboxes(
+            test_loader, model, iou_threshold=0.5, threshold=0.4
+        )
+        logging.info("calculating AP")
+        mean_avg_prec = mean_average_precision(
+            pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
+        )
+        print(f"Test mAP: {mean_avg_prec}")
+        logging.info(f"Test mAP: {mean_avg_prec}")
+    
+        logging.info(f"exiting")
+        return
+    
+    elif PHASE=='train':
+        for epoch in range(EPOCHS):
+            logging.info(f"########################EPOCH {epoch}/{EPOCHS} #####################") 
+            train_fn(train_loader, model, optimizer, loss_fn)
+            
+            if epoch > 20 and epoch % 5 == 0:
+                # Calculate Train mAP
+                logging.info("############# on TRAIN ##############")
+                logging.info("getting boxes")
+                pred_boxes, target_boxes = get_bboxes(
+                    train_loader, model, iou_threshold=0.5, threshold=0.4
+                )
+                logging.info("calculating AP")
+                mean_avg_prec = mean_average_precision(
+                    pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
+                )
+                logging.info(f"Train mAP: {mean_avg_prec}")
+                
+                # Calculate Test mAP
+                logging.info(f"############# on TEST ##############")
+                logging.info(f"getting boxes")
+                pred_boxes, target_boxes = get_bboxes(
+                    test_loader, model, iou_threshold=0.5, threshold=0.4
+                )
+                logging.info("calculating AP")
+                mean_avg_prec = mean_average_precision(
+                    pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
+                )
+                logging.info(f"Test mAP: {mean_avg_prec}")
+                
+                if mean_avg_prec > best_map:
+                    best_map = mean_avg_prec
+                    best_model= {
+                    "state_dict": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                }
+        
+        logging.info(f"best mAP on testset is {best_map}")
+        save_checkpoint(best_model, filename=LOAD_MODEL_FILE)
 
 
 
